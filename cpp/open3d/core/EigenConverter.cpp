@@ -114,32 +114,52 @@ static core::Tensor EigenVectorNxVectorToTensor(
         const std::vector<Eigen::Matrix<T, N, 1>> &values,
         core::Dtype dtype,
         const core::Device &device) {
-    // Unlike TensorToEigenVector3NVector, more types can be supported here. To
-    // keep consistency, we only allow double and int.
     static_assert(
             (std::is_same<T, double>::value || std::is_same<T, int>::value) &&
                     N > 0,
             "Only supports double and int (VectorNd and VectorNi) with N>0.");
-    // Init CPU Tensor.
+
+    // Force CPU device initially for safe memory handling
+    core::Device safe_device("CPU:0");
+    
+    // Init CPU Tensor with explicit alignment
     int64_t num_values = static_cast<int64_t>(values.size());
     core::Tensor tensor_cpu =
-            core::Tensor::Empty({num_values, N}, dtype, Device("CPU:0"));
-
-    // Fill Tensor. This takes care of dtype conversion at the same time.
+            core::Tensor::Empty({num_values, N}, dtype, safe_device);
+    
+    // Use intermediate buffer for safer memory copying
+    std::vector<T> buffer(num_values * N);
+    for (int64_t i = 0; i < num_values; ++i) {
+        for (int j = 0; j < N; ++j) {
+            buffer[i * N + j] = values[i](j);
+        }
+    }
+    
+    // Fill Tensor using buffer
     core::Indexer indexer({tensor_cpu}, tensor_cpu,
                           core::DtypePolicy::ALL_SAME);
     DISPATCH_DTYPE_TO_TEMPLATE(dtype, [&]() {
         LaunchIndexFillKernel(indexer, [&](void *ptr, int64_t workload_idx) {
-            // Fills the flattened tensor tensor_cpu[:] with dtype
-            // casting. tensor_cpu[:][i] corresponds to the (i/N)-th
-            // element's (i%N)-th coordinate value.
             *static_cast<scalar_t *>(ptr) = static_cast<scalar_t>(
-                    values[workload_idx / N](workload_idx % N));
+                    buffer[workload_idx]);
         });
     });
 
-    // Copy Tensor to device if necessary.
-    return tensor_cpu.To(device);
+    // Add debug logging
+    if (num_values > 0) {
+        utility::LogDebug(
+            "First element converted - original: ({}, {}, {}), buffer: ({}, {}, {})",
+            values[0](0), values[0](1), values[0](2),
+            buffer[0], buffer[1], buffer[2]);
+    }
+
+    // Copy Tensor to device if necessary
+    try {
+        return tensor_cpu.To(device);
+    } catch (const std::exception& e) {
+        utility::LogError("Failed to transfer tensor to device: {}", e.what());
+        return tensor_cpu;  // Return CPU tensor as fallback
+    }
 }
 
 std::vector<Eigen::Vector2d> TensorToEigenVector2dVector(

@@ -37,18 +37,37 @@ py::class_<Vector, holder_type> bind_vector_without_repr(
 template <typename EigenVector>
 std::vector<EigenVector> py_array_to_vectors_double(
         py::array_t<double, py::array::c_style | py::array::forcecast> array) {
-    int64_t eigen_vector_size = EigenVector::SizeAtCompileTime;
-    if (array.ndim() != 2 || array.shape(1) != eigen_vector_size) {
+    // Add debug prints
+    utility::LogDebug("Converting array to vectors: shape=({}, {})",
+                     array.shape(0), array.shape(1));
+
+    if (array.ndim() != 2 || array.shape(1) != EigenVector::SizeAtCompileTime) {
         throw py::cast_error();
     }
+
     std::vector<EigenVector> eigen_vectors(array.shape(0));
-    auto array_unchecked = array.mutable_unchecked<2>();
+    auto array_unchecked = array.unchecked<2>();  // Changed to const access
+
+    // Pre-allocate aligned memory for each vector
     for (auto i = 0; i < array_unchecked.shape(0); ++i) {
-        // The EigenVector here must be a double-typed eigen vector, since only
-        // open3d::Vector3dVector binds to py_array_to_vectors_double.
-        // Therefore, we can use the memory map directly.
-        eigen_vectors[i] = Eigen::Map<EigenVector>(&array_unchecked(i, 0));
+        // Create temporary buffer with values
+        double buffer[EigenVector::SizeAtCompileTime];
+        for (auto j = 0; j < EigenVector::SizeAtCompileTime; ++j) {
+            buffer[j] = array_unchecked(i, j);
+        }
+        
+        // Safely copy to aligned Eigen vector
+        eigen_vectors[i] = Eigen::Map<const EigenVector>(buffer);
+        
+        // Debug log for first vector
+        if (i == 0) {
+            utility::LogDebug("First vector converted: ({}, {}, {})",
+                            eigen_vectors[i][0],
+                            eigen_vectors[i][1],
+                            eigen_vectors[i][2]);
+        }
     }
+
     return eigen_vectors;
 }
 

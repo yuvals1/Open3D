@@ -54,7 +54,8 @@ __global__ void l2SelectMin1(T* productDistances,
                              int dim) {
     // Each block handles kRowsPerBlock rows of the distances (results)
     Pair<T, int> threadMin[kRowsPerBlock];
-    __shared__ Pair<T, int> blockMin[kRowsPerBlock * (kBlockSize / kWarpSize)];
+    extern __shared__ __align__(sizeof(Pair<T, int>)) char shared_mem[];
+    Pair<T, int>* blockMin = reinterpret_cast<Pair<T, int>*>(shared_mem);
 
     T distance[kRowsPerBlock];
 
@@ -214,8 +215,10 @@ void runL2SelectMin(const cudaStream_t stream,
         auto grid =
                 dim3(utility::DivUp(outDistances.GetShape(0), kRowsPerBlock));
 
+        size_t shared_mem_size = kRowsPerBlock * (kThreadsPerBlock / kWarpSize) * sizeof(Pair<T, int>);
         l2SelectMin1<T, TIndex, kRowsPerBlock, kThreadsPerBlock>
-                <<<grid, block, 0, stream>>>(productDistances.GetDataPtr<T>(),
+                <<<grid, block, shared_mem_size, stream>>>(
+                                             productDistances.GetDataPtr<T>(),
                                              centroidDistances.GetDataPtr<T>(),
                                              outDistances.GetDataPtr<T>(),
                                              outIndices.GetDataPtr<TIndex>(),
