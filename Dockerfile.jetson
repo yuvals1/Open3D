@@ -1,20 +1,16 @@
 FROM nvcr.io/nvidia/l4t-jetpack:r35.2.1
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=UTC
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+ENV DEBIAN_FRONTEND=noninteractive TZ=UTC NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 RUN apt-get update && apt-get install -y \
-    git build-essential curl wget python3-pip python3-dev pkg-config \
+    git build-essential curl wget pkg-config \
+    python3-pip python3.9-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN ln -sf /usr/bin/python3 /usr/bin/python
-RUN pip3 install --upgrade pip
+# Upgrade pip and ensure Python 3.9 is used consistently
+RUN python3.9 -m pip install --upgrade pip
 
-# Install newer CMake
-# Check https://github.com/Kitware/CMake/releases for the latest ARM64 release
-# Example uses CMake 3.22.6. Adjust the version to what you prefer or what you used on x86.
+# Install CMake (as done before)
 RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.22.6/cmake-3.22.6-linux-aarch64.sh \
     && chmod +x cmake-3.22.6-linux-aarch64.sh \
     && ./cmake-3.22.6-linux-aarch64.sh --prefix=/usr/local --skip-license \
@@ -25,13 +21,14 @@ RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.22.6/cmake-3.2
 COPY . /root/Open3D
 WORKDIR /root/Open3D
 
-# Install Python dependencies
-RUN pip3 install -r python/requirements.txt -r python/requirements_build.txt
+# Install Python dependencies with Python 3.9
+RUN python3.9 -m pip install -r python/requirements.txt -r python/requirements_build.txt
 
-# Build Open3D with CUDA
+# Specify the Python executable to CMake
 RUN mkdir build && cd build && \
     cmake -DBUILD_CUDA_MODULE=ON \
           -DBUILD_PYTHON_MODULE=ON \
+          -DPYTHON_EXECUTABLE=/usr/bin/python3.9 \
           -DBUILD_SHARED_LIBS=OFF \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=~/open3d_install \
