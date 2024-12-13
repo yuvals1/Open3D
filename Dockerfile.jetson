@@ -2,7 +2,7 @@ FROM nvcr.io/nvidia/l4t-jetpack:r35.2.1
 
 ENV DEBIAN_FRONTEND=noninteractive TZ=UTC NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# Install system dependencies including Python dev, X11 dev libs, clang, Fortran, and other needed packages
+# Install dependencies
 RUN apt-get update && apt-get install -y \
     git build-essential curl wget pkg-config \
     python3-pip python3.9-dev \
@@ -29,12 +29,11 @@ WORKDIR /root/Open3D
 # Install Python dependencies
 RUN python3.9 -m pip install -r python/requirements.txt -r python/requirements_build.txt
 
-# Configure and build Open3D with GUI disabled
-#
+# Configure and build Open3D
 # Key changes:
-# - BUILD_GUI=OFF to skip building GUI and related dependencies (e.g., Filament).
-# - Keep CUDA and Python module enabled.
-# - Use clang for C/C++ and g++ as CUDA host compiler without forcing libc++.
+# - BUILD_GUI=OFF to avoid Filament and GUI dependencies.
+# - Disable LTO by setting CMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF.
+# - Use clang for C/C++ and g++ for CUDA host compiler.
 RUN mkdir build && cd build && \
     cmake \
         -DBUILD_CUDA_MODULE=ON \
@@ -47,6 +46,7 @@ RUN mkdir build && cd build && \
         -DCMAKE_C_COMPILER=clang \
         -DCMAKE_CXX_COMPILER=clang++ \
         -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++ \
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
         .. && \
     make -j$(nproc) && \
     make install-pip-package -j$(nproc)
