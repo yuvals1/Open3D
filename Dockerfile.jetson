@@ -7,33 +7,26 @@ RUN apt-get update && apt-get install -y \
     git build-essential curl wget pkg-config \
     python3-pip python3.9-dev \
     libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-    clang libc++-dev libc++abi-dev gfortran \
+    gfortran \
     libglu1-mesa-dev freeglut3-dev mesa-common-dev libfreetype6-dev \
     libxxf86vm-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip
 RUN python3.9 -m pip install --upgrade pip
 
-# Install a newer CMake
+# Install CMake
 RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.22.6/cmake-3.22.6-linux-aarch64.sh \
     && chmod +x cmake-3.22.6-linux-aarch64.sh \
     && ./cmake-3.22.6-linux-aarch64.sh --prefix=/usr/local --skip-license \
     && rm cmake-3.22.6-linux-aarch64.sh \
     && cmake --version
 
-# Copy Open3D source
 COPY . /root/Open3D
 WORKDIR /root/Open3D
 
-# Install Python dependencies
 RUN python3.9 -m pip install -r python/requirements.txt -r python/requirements_build.txt
 
-# Configure and build Open3D
-# Key changes:
-# - BUILD_GUI=OFF to avoid Filament and GUI dependencies.
-# - Disable LTO by setting CMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF.
-# - Use clang for C/C++ and g++ for CUDA host compiler.
+# Build with GCC for both C/C++ and CUDA host compiler, no GUI, no LTO
 RUN mkdir build && cd build && \
     cmake \
         -DBUILD_CUDA_MODULE=ON \
@@ -43,9 +36,10 @@ RUN mkdir build && cd build && \
         -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=~/open3d_install \
-        -DCMAKE_C_COMPILER=clang \
-        -DCMAKE_CXX_COMPILER=clang++ \
-        -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++ \
+        -DCMAKE_C_COMPILER=gcc \
+        -DCMAKE_CXX_COMPILER=g++ \
+        -DCMAKE_CUDA_HOST_COMPILER=g++ \
+        -DOPEN3D_ENABLE_LTO=OFF \
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
         .. && \
     make -j$(nproc) && \
