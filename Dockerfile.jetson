@@ -2,14 +2,7 @@ FROM nvcr.io/nvidia/l4t-jetpack:r35.2.1
 
 ENV DEBIAN_FRONTEND=noninteractive TZ=UTC NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-
-# Install system dependencies
-# - python3.9-dev for Python development headers
-# - X11 dev libs (libxrandr, libxinerama, libxcursor, libxi)
-# - libc++ and libc++abi for Filament with Clang
-# - gfortran for OpenBLAS/LAPACK
-# - libxxf86vm-dev for Xf86vmode extension headers required by SDL2/Filament
-# - Additional OpenGL/Mesa dev libs (libglu1-mesa-dev, freeglut3-dev, mesa-common-dev, libfreetype6-dev)
+# Install system dependencies including Python dev, X11 dev libs, clang, Fortran, and other needed packages
 RUN apt-get update && apt-get install -y \
     git build-essential curl wget pkg-config \
     python3-pip python3.9-dev \
@@ -22,41 +15,38 @@ RUN apt-get update && apt-get install -y \
 # Upgrade pip
 RUN python3.9 -m pip install --upgrade pip
 
-# Install a newer CMake (3.22.6 used as an example)
+# Install a newer CMake
 RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.22.6/cmake-3.22.6-linux-aarch64.sh \
     && chmod +x cmake-3.22.6-linux-aarch64.sh \
     && ./cmake-3.22.6-linux-aarch64.sh --prefix=/usr/local --skip-license \
     && rm cmake-3.22.6-linux-aarch64.sh \
     && cmake --version
 
-# Copy Open3D source into the container
+# Copy Open3D source
 COPY . /root/Open3D
 WORKDIR /root/Open3D
 
-# Install Python dependencies for Open3D
+# Install Python dependencies
 RUN python3.9 -m pip install -r python/requirements.txt -r python/requirements_build.txt
 
-# Build Open3D
+# Configure and build Open3D with GUI disabled
 #
-# We set:
-# - CUDA module and Python module ON.
-# - PYTHON_EXECUTABLE to the system python3.9.
-# - BUILD_SHARED_LIBS=OFF for static linking.
-# - Use Clang/Clang++ for C and C++ compilers, and also set the CUDA host compiler to Clang++.
-# - Use libc++ as the C++ standard library.
+# Key changes:
+# - BUILD_GUI=OFF to skip building GUI and related dependencies (e.g., Filament).
+# - Keep CUDA and Python module enabled.
+# - Use clang for C/C++ and g++ as CUDA host compiler without forcing libc++.
 RUN mkdir build && cd build && \
     cmake \
         -DBUILD_CUDA_MODULE=ON \
         -DBUILD_PYTHON_MODULE=ON \
+        -DBUILD_GUI=OFF \
         -DPYTHON_EXECUTABLE=/usr/bin/python3.9 \
         -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=~/open3d_install \
         -DCMAKE_C_COMPILER=clang \
         -DCMAKE_CXX_COMPILER=clang++ \
-        -DCMAKE_CUDA_HOST_COMPILER=clang++ \
-        -DCMAKE_CXX_FLAGS=-stdlib=libc++ \
-        -DCMAKE_EXE_LINKER_FLAGS=-stdlib=libc++ \
+        -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++ \
         .. && \
     make -j$(nproc) && \
     make install-pip-package -j$(nproc)
