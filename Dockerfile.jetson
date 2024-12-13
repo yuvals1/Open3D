@@ -1,44 +1,34 @@
-# A Jetson-compatible base image. Adjust the tag for your JetPack version.
-FROM nvcr.io/nvidia/l4t-base:r35.2.1
+FROM nvcr.io/nvidia/l4t-jetpack:r35.2.1
 
-# Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
-
-# Ensure GPU is accessible. On Jetson, this usually just works with --runtime=nvidia,
-# but we'll set the environment variable anyway.
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
-# Update and install build tools & Python
 RUN apt-get update && apt-get install -y \
-    git build-essential cmake curl wget python3-pip python3-dev pkg-config \
+    git build-essential curl wget python3-pip python3-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Python3 as default python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
-
-# Upgrade pip
 RUN pip3 install --upgrade pip
 
-# Copy Open3D source into the container
-# Assuming you have the Open3D repo checked out locally on your Jetson
-# and you run docker build from the Open3D root directory.
+# Install newer CMake
+# Check https://github.com/Kitware/CMake/releases for the latest ARM64 release
+# Example uses CMake 3.22.6. Adjust the version to what you prefer or what you used on x86.
+RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.22.6/cmake-3.22.6-linux-aarch64.sh \
+    && chmod +x cmake-3.22.6-linux-aarch64.sh \
+    && ./cmake-3.22.6-linux-aarch64.sh --prefix=/usr/local --skip-license \
+    && rm cmake-3.22.6-linux-aarch64.sh \
+    && cmake --version
+
+# Copy Open3D source
 COPY . /root/Open3D
 WORKDIR /root/Open3D
 
-# Install Python and build dependencies
-# Adjust requirements if you need ML frameworks (PyTorch, TF)
+# Install Python dependencies
 RUN pip3 install -r python/requirements.txt -r python/requirements_build.txt
 
-# If you want PyTorch ops, install PyTorch for Jetson before building:
-# For example, get a compatible PyTorch wheel from:
-# https://forums.developer.nvidia.com/t/pytorch-for-jetson/72048
-# RUN pip3 install torch-<...>-linux_aarch64.whl
-
-# CMake build
-# Note: If you want TensorFlow or PyTorch ops, you must set BUILD_TENSORFLOW_OPS=ON or BUILD_PYTORCH_OPS=ON.
-# For now, let's just enable CUDA.
+# Build Open3D with CUDA
 RUN mkdir build && cd build && \
     cmake -DBUILD_CUDA_MODULE=ON \
           -DBUILD_PYTHON_MODULE=ON \
@@ -48,7 +38,4 @@ RUN mkdir build && cd build && \
           .. && \
     make -j$(nproc) && \
     make install-pip-package -j$(nproc)
-
-# The wheel will be located at build/lib/python_package/pip_package after the build.
-# We can optionally copy it out or leave it in the image.
 
