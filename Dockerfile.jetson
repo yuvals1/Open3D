@@ -2,30 +2,48 @@ FROM nvcr.io/nvidia/l4t-jetpack:r35.2.1
 
 ENV DEBIAN_FRONTEND=noninteractive TZ=UTC NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# Install required packages, now including gfortran
+
+# Install system dependencies
+# - python3.9-dev for Python development headers
+# - X11 dev libs (libxrandr, libxinerama, libxcursor, libxi)
+# - libc++ and libc++abi for Filament with Clang
+# - gfortran for OpenBLAS/LAPACK
+# - libxxf86vm-dev for Xf86vmode extension headers required by SDL2/Filament
+# - Additional OpenGL/Mesa dev libs (libglu1-mesa-dev, freeglut3-dev, mesa-common-dev, libfreetype6-dev)
 RUN apt-get update && apt-get install -y \
     git build-essential curl wget pkg-config \
     python3-pip python3.9-dev \
     libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-    clang libc++-dev libc++abi-dev \
-    gfortran \
+    clang libc++-dev libc++abi-dev gfortran \
+    libglu1-mesa-dev freeglut3-dev mesa-common-dev libfreetype6-dev \
+    libxxf86vm-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip
 RUN python3.9 -m pip install --upgrade pip
 
-# Install CMake
+# Install a newer CMake (3.22.6 used as an example)
 RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.22.6/cmake-3.22.6-linux-aarch64.sh \
     && chmod +x cmake-3.22.6-linux-aarch64.sh \
     && ./cmake-3.22.6-linux-aarch64.sh --prefix=/usr/local --skip-license \
     && rm cmake-3.22.6-linux-aarch64.sh \
     && cmake --version
 
+# Copy Open3D source into the container
 COPY . /root/Open3D
 WORKDIR /root/Open3D
 
+# Install Python dependencies for Open3D
 RUN python3.9 -m pip install -r python/requirements.txt -r python/requirements_build.txt
 
-# Use clang and libc++, and set CUDA host compiler to clang++
+# Build Open3D
+#
+# We set:
+# - CUDA module and Python module ON.
+# - PYTHON_EXECUTABLE to the system python3.9.
+# - BUILD_SHARED_LIBS=OFF for static linking.
+# - Use Clang/Clang++ for C and C++ compilers, and also set the CUDA host compiler to Clang++.
+# - Use libc++ as the C++ standard library.
 RUN mkdir build && cd build && \
     cmake \
         -DBUILD_CUDA_MODULE=ON \
