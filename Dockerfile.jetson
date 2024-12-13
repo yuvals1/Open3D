@@ -2,17 +2,18 @@ FROM nvcr.io/nvidia/l4t-jetpack:r35.2.1
 
 ENV DEBIAN_FRONTEND=noninteractive TZ=UTC NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
-# Install required packages including libc++ and libc++abi
+# Install required packages, now including gfortran
 RUN apt-get update && apt-get install -y \
     git build-essential curl wget pkg-config \
     python3-pip python3.9-dev \
     libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
     clang libc++-dev libc++abi-dev \
+    gfortran \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3.9 -m pip install --upgrade pip
 
-# Install newer CMake
+# Install CMake
 RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.22.6/cmake-3.22.6-linux-aarch64.sh \
     && chmod +x cmake-3.22.6-linux-aarch64.sh \
     && ./cmake-3.22.6-linux-aarch64.sh --prefix=/usr/local --skip-license \
@@ -24,23 +25,21 @@ WORKDIR /root/Open3D
 
 RUN python3.9 -m pip install -r python/requirements.txt -r python/requirements_build.txt
 
-# Use clang and specify libc++ for C++ standard library
-ENV CC=clang
-ENV CXX=clang++
-
-# Ensure CMake knows to use libc++
-# Adding these flags ensures clang uses libc++ instead of libstdc++
-ENV CXXFLAGS="-stdlib=libc++"
-ENV LDFLAGS="-stdlib=libc++"
-
+# Use clang and libc++, and set CUDA host compiler to clang++
 RUN mkdir build && cd build && \
-    cmake -DBUILD_CUDA_MODULE=ON \
-          -DBUILD_PYTHON_MODULE=ON \
-          -DPYTHON_EXECUTABLE=/usr/bin/python3.9 \
-          -DBUILD_SHARED_LIBS=OFF \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_INSTALL_PREFIX=~/open3d_install \
-          .. && \
+    cmake \
+        -DBUILD_CUDA_MODULE=ON \
+        -DBUILD_PYTHON_MODULE=ON \
+        -DPYTHON_EXECUTABLE=/usr/bin/python3.9 \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=~/open3d_install \
+        -DCMAKE_C_COMPILER=clang \
+        -DCMAKE_CXX_COMPILER=clang++ \
+        -DCMAKE_CUDA_HOST_COMPILER=clang++ \
+        -DCMAKE_CXX_FLAGS=-stdlib=libc++ \
+        -DCMAKE_EXE_LINKER_FLAGS=-stdlib=libc++ \
+        .. && \
     make -j$(nproc) && \
     make install-pip-package -j$(nproc)
 
