@@ -4,15 +4,21 @@ ENV DEBIAN_FRONTEND=noninteractive TZ=UTC NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIV
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
+    software-properties-common \
     git build-essential curl wget pkg-config \
-    python3-pip python3.9-dev \
     libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
     gfortran \
     libglu1-mesa-dev freeglut3-dev mesa-common-dev libfreetype6-dev \
     libxxf86vm-dev \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y python3.10 python3.10-dev python3.10-distutils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3.9 -m pip install --upgrade pip
+# Upgrade pip for Python 3.10
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    python3.10 get-pip.py && \
+    rm get-pip.py && \
+    pip3.10 install --upgrade pip
 
 # Install CMake
 RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.22.6/cmake-3.22.6-linux-aarch64.sh \
@@ -21,18 +27,21 @@ RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.22.6/cmake-3.2
     && rm cmake-3.22.6-linux-aarch64.sh \
     && cmake --version
 
+# Copy Open3D source
 COPY . /root/Open3D
 WORKDIR /root/Open3D
 
-RUN python3.9 -m pip install -r python/requirements.txt -r python/requirements_build.txt
+# Install Python dependencies with Python 3.10
+RUN pip3.10 install -r python/requirements.txt -r python/requirements_build.txt
 
-# Build with GCC for both C/C++ and CUDA host compiler, no GUI, no LTO
+# Build Open3D
+# Using GCC for simplicity, no GUI, and Python 3.10:
 RUN mkdir build && cd build && \
     cmake \
         -DBUILD_CUDA_MODULE=ON \
         -DBUILD_PYTHON_MODULE=ON \
         -DBUILD_GUI=OFF \
-        -DPYTHON_EXECUTABLE=/usr/bin/python3.9 \
+        -DPYTHON_EXECUTABLE=/usr/bin/python3.10 \
         -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=~/open3d_install \
