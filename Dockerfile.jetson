@@ -35,20 +35,39 @@ WORKDIR /root/Open3D
 RUN pip3.10 install -r python/requirements.txt -r python/requirements_build.txt
 
 # Build Open3D
-# Using GCC for simplicity, no GUI, and Python 3.10:
+# First build CPU version, then CUDA version
 RUN mkdir build && cd build && \
+    # First build - CPU version
+    cmake \
+        -DBUILD_CUDA_MODULE=OFF \
+        -DBUILD_PYTHON_MODULE=ON \
+        -DBUILD_GUI=OFF \
+        -DPYTHON_EXECUTABLE=/usr/bin/python3.10 \
+        -DBUILD_SHARED_LIBS=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=~/open3d_install \
+        -DCMAKE_C_COMPILER=gcc \
+        -DCMAKE_CXX_COMPILER=g++ \
+        .. && \
+    make -j$(nproc) && \
+    # Second build - CUDA version (keeping your original CUDA build configuration)
     cmake \
         -DBUILD_CUDA_MODULE=ON \
         -DBUILD_PYTHON_MODULE=ON \
         -DBUILD_GUI=OFF \
         -DPYTHON_EXECUTABLE=/usr/bin/python3.10 \
-        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_SHARED_LIBS=ON \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=~/open3d_install \
+	-DCMAKE_CXX_FLAGS="-ftls-model=local-dynamic -fPIC" \
+	-DCMAKE_CUDA_FLAGS="--default-stream per-thread" \
+	-DBUILD_CUDA_MODULE_REDUCED_SIZE=ON \
+        -DUSE_SYSTEM_EIGEN3=ON \
         -DCMAKE_C_COMPILER=gcc \
         -DCMAKE_CXX_COMPILER=g++ \
         -DCMAKE_CUDA_HOST_COMPILER=g++ \
         -DOPEN3D_ENABLE_LTO=OFF \
+	-DBUILD_WEBRTC=OFF \
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
         .. && \
     make -j$(nproc) && \
