@@ -1,10 +1,8 @@
 FROM nvcr.io/nvidia/l4t-jetpack:r35.2.1
-
 ARG BUILD_CUDA_MODULE=ON
 ARG BUILD_TENSORFLOW_OPS=OFF
 ARG BUILD_PYTORCH_OPS=OFF
 
-# Remove --sysroot and -isystem overrides from CFLAGS/CXXFLAGS/LDFLAGS
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
     NVIDIA_VISIBLE_DEVICES=all \
@@ -46,6 +44,30 @@ WORKDIR /root/Open3D
 
 RUN pip3.10 install --ignore-installed -r python/requirements.txt -r python/requirements_build.txt
 
+# Build CPU version first
+RUN mkdir build_cpu && cd build_cpu && \
+    cmake \
+        -DBUILD_CUDA_MODULE=OFF \
+        -DBUILD_TENSORFLOW_OPS=${BUILD_TENSORFLOW_OPS} \
+        -DBUILD_PYTORCH_OPS=${BUILD_PYTORCH_OPS} \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_UNIT_TESTS=OFF \
+        -DBUILD_PYTHON_MODULE=ON \
+        -DBUILD_GUI=OFF \
+        -DBUILD_WEBRTC=OFF \
+        -DBUILD_SHARED_LIBS=ON \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DCMAKE_C_COMPILER=gcc \
+        -DCMAKE_CXX_COMPILER=g++ \
+        -DUSE_BLAS=ON \
+        -DPYTHON_EXECUTABLE=/usr/bin/python3.10 \
+        -DGLIBCXX_USE_CXX11_ABI=OFF \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_FLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
+        .. && \
+    make -j$(nproc)
+
+# Build CUDA version
 RUN mkdir build && cd build && \
     cmake \
         -DBUILD_CUDA_MODULE=${BUILD_CUDA_MODULE} \
@@ -67,5 +89,11 @@ RUN mkdir build && cd build && \
         -DCMAKE_CXX_FLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
         .. && \
     make -j$(nproc) && \
+    # After CUDA build, copy CPU files
+    mkdir -p lib/Release/Python && \
+    cp -r ../build_cpu/lib/Release/Python/cpu lib/Release/Python/ && \
+    # Create pip package
     make install-pip-package -j$(nproc)
 
+ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+ENV LD_PRELOAD=/usr/local/lib/libOpen3D.so
