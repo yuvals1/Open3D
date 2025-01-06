@@ -1,8 +1,14 @@
 FROM nvcr.io/nvidia/l4t-jetpack:r35.2.1
 
-ENV DEBIAN_FRONTEND=noninteractive TZ=UTC NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ARG BUILD_CUDA_MODULE=ON
+ARG BUILD_TENSORFLOW_OPS=OFF
+ARG BUILD_PYTORCH_OPS=OFF
 
-# Install dependencies
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     git build-essential curl wget pkg-config \
@@ -11,65 +17,40 @@ RUN apt-get update && apt-get install -y \
     libglu1-mesa-dev freeglut3-dev mesa-common-dev libfreetype6-dev \
     libxxf86vm-dev \
     && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y python3.10 python3.10-dev python3.10-distutils \
+    && apt-get update && apt-get install -y \
+       python3.10 python3.10-dev python3.10-distutils \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip for Python 3.10
 RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
     python3.10 get-pip.py && \
     rm get-pip.py && \
     pip3.10 install --upgrade pip
 
-# Install CMake
 RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.22.6/cmake-3.22.6-linux-aarch64.sh \
     && chmod +x cmake-3.22.6-linux-aarch64.sh \
     && ./cmake-3.22.6-linux-aarch64.sh --prefix=/usr/local --skip-license \
     && rm cmake-3.22.6-linux-aarch64.sh \
     && cmake --version
 
-# Copy Open3D source
 COPY . /root/Open3D
 WORKDIR /root/Open3D
 
-# Install Python dependencies with Python 3.10
 RUN pip3.10 install -r python/requirements.txt -r python/requirements_build.txt
 
-# Build Open3D
-# First build CPU version, then CUDA version
 RUN mkdir build && cd build && \
-    # First build - CPU version
     cmake \
-        -DBUILD_CUDA_MODULE=OFF \
+        -DBUILD_CUDA_MODULE=${BUILD_CUDA_MODULE} \
+        -DBUILD_TENSORFLOW_OPS=${BUILD_TENSORFLOW_OPS} \
+        -DBUILD_PYTORCH_OPS=${BUILD_PYTORCH_OPS} \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_UNIT_TESTS=OFF \
         -DBUILD_PYTHON_MODULE=ON \
         -DBUILD_GUI=OFF \
-        -DPYTHON_EXECUTABLE=/usr/bin/python3.10 \
+        -DBUILD_WEBRTC=OFF \
         -DBUILD_SHARED_LIBS=ON \
-        -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=~/open3d_install \
         -DCMAKE_C_COMPILER=gcc \
         -DCMAKE_CXX_COMPILER=g++ \
-        .. && \
-    make -j$(nproc) && \
-    # Second build - CUDA version (keeping your original CUDA build configuration)
-    cmake \
-        -DBUILD_CUDA_MODULE=ON \
-        -DBUILD_PYTHON_MODULE=ON \
-        -DBUILD_GUI=OFF \
-        -DPYTHON_EXECUTABLE=/usr/bin/python3.10 \
-        -DBUILD_SHARED_LIBS=ON \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=~/open3d_install \
-	-DCMAKE_CXX_FLAGS="-ftls-model=local-dynamic -fPIC" \
-	-DCMAKE_CUDA_FLAGS="--default-stream per-thread" \
-	-DBUILD_CUDA_MODULE_REDUCED_SIZE=ON \
-        -DUSE_SYSTEM_EIGEN3=ON \
-        -DCMAKE_C_COMPILER=gcc \
-        -DCMAKE_CXX_COMPILER=g++ \
-        -DCMAKE_CUDA_HOST_COMPILER=g++ \
-        -DOPEN3D_ENABLE_LTO=OFF \
-	-DBUILD_WEBRTC=OFF \
-        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
         .. && \
     make -j$(nproc) && \
     make install-pip-package -j$(nproc)
-
