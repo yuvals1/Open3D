@@ -61,9 +61,9 @@ RUN mkdir build_cpu && cd build_cpu && \
         -DCMAKE_CXX_COMPILER=g++ \
         -DUSE_BLAS=ON \
         -DPYTHON_EXECUTABLE=/usr/bin/python3.10 \
-        -DGLIBCXX_USE_CXX11_ABI=OFF \
+        -DGLIBCXX_USE_CXX11_ABI=ON \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-        -DCMAKE_CXX_FLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
+        -DCMAKE_CXX_FLAGS="-D_GLIBCXX_USE_CXX11_ABI=1" \
         .. && \
     make -j$(nproc)
 
@@ -84,9 +84,9 @@ RUN mkdir build && cd build && \
         -DCMAKE_CXX_COMPILER=g++ \
         -DUSE_BLAS=ON \
         -DPYTHON_EXECUTABLE=/usr/bin/python3.10 \
-        -DGLIBCXX_USE_CXX11_ABI=OFF \
+        -DGLIBCXX_USE_CXX11_ABI=ON \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-        -DCMAKE_CXX_FLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
+        -DCMAKE_CXX_FLAGS="-D_GLIBCXX_USE_CXX11_ABI=1" \
         .. && \
     make -j$(nproc) && \
     # After CUDA build, copy CPU files
@@ -97,3 +97,4 @@ RUN mkdir build && cd build && \
 
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 ENV LD_PRELOAD=/usr/local/lib/libOpen3D.so
+
